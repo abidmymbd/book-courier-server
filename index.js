@@ -35,15 +35,15 @@ async function run() {
 
         //// Book Add APIs
         app.get('/books', async (req, res) => {
-
+            const books = await booksCollection.find().toArray();
+            res.send(books);
         })
 
         app.post('/books', async (req, res) => {
-            const book = req.body
-
-            const result = await booksCollection.insertOne(book)
-            res.send(result)
-        })
+            const book = req.body;
+            const result = await booksCollection.insertOne(book);
+            res.send(result);
+        });
 
 
 
