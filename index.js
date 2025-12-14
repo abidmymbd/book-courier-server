@@ -2,7 +2,7 @@ const express = require('express')
 const cors = require('cors')
 const app = express()
 require('dotenv').config()
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
 const port = process.env.PORT || 3000
 
@@ -35,14 +35,87 @@ async function run() {
 
         //// Book Add APIs
         app.get('/books', async (req, res) => {
-            const books = await booksCollection.find().toArray();
+
+            const query = {}
+
+            const { email } = req.query
+            if (email) {
+                query.email = email
+            }
+            else {
+                query.status = 'published';
+            }
+
+            const books = (await booksCollection.find(query).sort({ createdAt: -1 }).toArray());
             res.send(books);
         })
 
+        app.get('/books/latest', async (req, res) => {
+            const books = await booksCollection
+                .find({ status: 'published' }) 
+                .sort({ createdAt: -1 })
+                .limit(6)
+                .toArray();
+            res.send(books);
+        });
+
+
+        // Get a single book by ID
+        app.get('/books/:id', async (req, res) => {
+            const { id } = req.params;
+            try {
+                const book = await booksCollection.findOne({ _id: new ObjectId(id) });
+                if (!book) {
+                    return res.status(404).send({ success: false, message: "Book not found" });
+                }
+                res.send(book);
+            } catch (err) {
+                console.error(err);
+                res.status(500).send({ success: false, message: "Server error" });
+            }
+        });
+
+
+
         app.post('/books', async (req, res) => {
             const book = req.body;
+
+            book.createdAt = new Date()
+
             const result = await booksCollection.insertOne(book);
             res.send(result);
+        });
+
+        app.patch('/books/:id/status', async (req, res) => {
+            const { id } = req.params;
+            const { status } = req.body;
+
+            const result = await booksCollection.updateOne(
+                { _id: new ObjectId(id) },
+                { $set: { status } }
+            );
+
+            res.send({ success: result.modifiedCount > 0 });
+        });
+
+        // Update a book by ID
+        app.patch('/books/:id', async (req, res) => {
+            const { id } = req.params;
+            const updatedData = req.body;
+
+            try {
+                const result = await booksCollection.updateOne(
+                    { _id: new ObjectId(id) },
+                    { $set: updatedData }
+                );
+
+                if (result.modifiedCount > 0) {
+                    res.send({ success: true, message: "Book updated successfully" });
+                }
+            } catch (err) {
+                console.error(err);
+                res.status(500).send({ success: false, message: "Server error" });
+            }
         });
 
 
