@@ -31,6 +31,77 @@ async function run() {
 
         const db = client.db('book_courier_db')
         const booksCollection = db.collection('books')
+        const ordersCollection = db.collection('orders');
+
+
+        /////// Order APIs
+
+        app.get('/orders', async (req, res) => {
+            try {
+                const { email } = req.query;
+                let query = {};
+
+                if (email) {
+                    query.userEmail = email;
+                }
+
+                const orders = await ordersCollection.find(query).sort({ createdAt: -1 }).toArray();
+                res.send(orders);
+            } catch (error) {
+                console.error(error);
+                res.status(500).send({ success: false, message: "Server error" });
+            }
+        });
+
+        app.get('/orders/:id', async (req, res) => {
+            const id = req.params.id
+            const query = { _id: new ObjectId(id) }
+            const result = await ordersCollection.findOne(query)
+            res.send(result)
+        })
+
+
+        app.post('/orders', async (req, res) => {
+            const order = req.body;
+
+            order.status = 'pending';
+            order.paymentStatus = 'unpaid';
+            order.userEmail = order.userEmail;
+            order.createdAt = new Date();
+
+            const result = await ordersCollection.insertOne(order);
+            res.send(result);
+        });
+
+        app.delete('/orders/:id', async (req, res) => {
+            const { id } = req.params;
+
+            try {
+                const result = await ordersCollection.deleteOne({ _id: new ObjectId(id) });
+                res.send({ success: result.deletedCount > 0 });
+            } catch (err) {
+                console.error(err);
+                res.status(500).send({ success: false, message: "Server error" });
+            }
+        });
+
+        app.patch('/orders/:id/status', async (req, res) => {
+            const { id } = req.params;
+            const { status } = req.body;
+
+            try {
+                const result = await ordersCollection.updateOne(
+                    { _id: new ObjectId(id) },
+                    { $set: { status } }
+                );
+                res.send({ success: result.modifiedCount > 0 });
+            } catch (err) {
+                console.error(err);
+                res.status(500).send({ success: false, message: "Server error" });
+            }
+        });
+
+
 
 
         //// Book Add APIs
@@ -52,7 +123,7 @@ async function run() {
 
         app.get('/books/latest', async (req, res) => {
             const books = await booksCollection
-                .find({ status: 'published' }) 
+                .find({ status: 'published' })
                 .sort({ createdAt: -1 })
                 .limit(6)
                 .toArray();
