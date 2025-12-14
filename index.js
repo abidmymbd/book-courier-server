@@ -102,6 +102,24 @@ async function run() {
             }
         });
 
+        app.patch('/orders/:id/cancel', async (req, res) => {
+            const { id } = req.params;
+
+            try {
+                const result = await ordersCollection.updateOne(
+                    { _id: new ObjectId(id), status: 'pending' },
+                    { $set: { status: 'cancelled' } }
+                );
+
+                res.send({ success: result.modifiedCount > 0 });
+            } catch (error) {
+                console.error(error);
+                res.status(500).send({ success: false, message: 'Server error' });
+            }
+        });
+
+
+
 
 
 
@@ -216,7 +234,7 @@ async function run() {
                     metadata: {
                         orderId: paymentInfo.orderId,
                     },
-                    success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success`,
+                    success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
                     cancel_url: `${process.env.SITE_DOMAIN}/dashboard/payment-cancelled`,
                 });
 
@@ -227,6 +245,57 @@ async function run() {
                 res.status(500).send({ error: error.message });
             }
         });
+
+        app.patch('/payment-success', async (req, res) => {
+            const sessionId = req.query.session_id
+            // console.log('sess id', sessionId)
+
+            const session = await stripe.checkout.sessions.retrieve(sessionId)
+            console.log('sess retr', session)
+
+            // const transactionId = session.payment_intent
+            // const query = { transactionId: transactionId }
+
+            // const paymentExist = await paymentCollection.findOne(query)
+
+            // if (paymentExist) {
+            //     return res.send({ message: 'Already Exists', transactionId, trackingId: paymentExist.trackingId })
+            // }
+
+            // const trackingId = session.metadata.trackingId
+
+            if (session.payment_status === 'paid') {
+                const id = session.metadata.orderId
+                const query = { _id: new ObjectId(id) }
+                const update = {
+                    $set: {
+                        paymentStatus: 'paid',
+                    }
+                }
+                const result = await ordersCollection.updateOne(query, update)
+                res.send(result)
+                const payment = {
+                    amount: session.amount_total,
+                    currency: session.currency,
+                    customerEmail: session.customer_email,
+                    orderId: session.metadata.orderId,
+                    bookName: session.metadata.bookName,
+                    transactionId: session.payment_intent,
+                    paymentStatus: session.payment_status,
+                    paidAt: new Date()
+                }
+
+                //     if (session.payment_status === 'paid') {
+                //         const resultPayment = await paymentCollection.insertOne(payment)
+
+                //         logTracking(trackingId, 'parcel_paid')
+
+                //         res.send({ success: true, modifyParcel: result, paymentInfo: resultPayment, trackingId: trackingId, transactionId: session.payment_intent })
+                //     }
+
+            }
+            res.send({ success: true })
+        })
 
 
         // Send a ping to confirm a successful connection
