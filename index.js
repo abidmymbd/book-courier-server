@@ -57,7 +57,28 @@ async function run() {
             const users = await usersCollection.find().toArray();
             res.send(users);
         });
-        
+
+        // Update user role (admin / librarian)
+        app.patch('/users/:id/role', async (req, res) => {
+            const { id } = req.params;
+            const { role } = req.body;
+
+            try {
+                const result = await usersCollection.updateOne(
+                    { _id: new ObjectId(id) },
+                    { $set: { role } }
+                );
+
+                res.send({
+                    success: result.modifiedCount > 0
+                });
+            } catch (error) {
+                console.error(error);
+                res.status(500).send({ success: false });
+            }
+        });
+
+
 
 
         /////// Order APIs
@@ -231,6 +252,30 @@ async function run() {
                 res.status(500).send({ success: false, message: "Server error" });
             }
         });
+
+        // Delete a book by ID
+        app.delete('/books/:id', async (req, res) => {
+            const { id } = req.params;
+            try {
+                const result = await booksCollection.deleteOne({ _id: new ObjectId(id) });
+                res.send({ success: result.deletedCount > 0 });
+            } catch (err) {
+                console.error(err);
+                res.status(500).send({ success: false, message: "Server error" });
+            }
+        });
+
+        app.get('/all-books', async (req, res) => {
+            try {
+                const books = await booksCollection.find({}).sort({ createdAt: -1 }).toArray();
+                res.send(books);
+            } catch (err) {
+                console.error(err);
+                res.status(500).send({ success: false, message: "Server error" });
+            }
+        });
+
+
 
 
         ////// Payment APIs
