@@ -33,10 +33,34 @@ async function run() {
         const db = client.db('book_courier_db')
         const booksCollection = db.collection('books')
         const ordersCollection = db.collection('orders');
+        const paymentCollection = db.collection('payments');
+        const usersCollection = db.collection('users');
+
+
+
+        // ////// users APIs
+        app.post('/users', async (req, res) => {
+            const user = req.body;
+            user.role = 'user'
+            user.createdAt = new Date()
+
+            const existingUser = await usersCollection.findOne({ email: user.email });
+            if (existingUser) {
+                return res.send({ message: 'User already exists' });
+            }
+
+            const result = await usersCollection.insertOne(user);
+            res.send(result);
+        });
+
+        app.get('/users', async (req, res) => {
+            const users = await usersCollection.find().toArray();
+            res.send(users);
+        });
+        
 
 
         /////// Order APIs
-
         app.get('/orders', async (req, res) => {
             try {
                 const { email } = req.query;
@@ -233,6 +257,7 @@ async function run() {
                     mode: 'payment',
                     metadata: {
                         orderId: paymentInfo.orderId,
+                        bookName: paymentInfo.bookName
                     },
                     success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
                     cancel_url: `${process.env.SITE_DOMAIN}/dashboard/payment-cancelled`,
@@ -247,55 +272,81 @@ async function run() {
         });
 
         app.patch('/payment-success', async (req, res) => {
-            const sessionId = req.query.session_id
-            // console.log('sess id', sessionId)
+            try {
+                const sessionId = req.query.session_id;
+                const session = await stripe.checkout.sessions.retrieve(sessionId);
 
-            const session = await stripe.checkout.sessions.retrieve(sessionId)
-            console.log('sess retr', session)
-
-            // const transactionId = session.payment_intent
-            // const query = { transactionId: transactionId }
-
-            // const paymentExist = await paymentCollection.findOne(query)
-
-            // if (paymentExist) {
-            //     return res.send({ message: 'Already Exists', transactionId, trackingId: paymentExist.trackingId })
-            // }
-
-            // const trackingId = session.metadata.trackingId
-
-            if (session.payment_status === 'paid') {
-                const id = session.metadata.orderId
-                const query = { _id: new ObjectId(id) }
-                const update = {
-                    $set: {
-                        paymentStatus: 'paid',
-                    }
+                if (session.payment_status !== 'paid') {
+                    return res.send({ success: false });
                 }
-                const result = await ordersCollection.updateOne(query, update)
-                res.send(result)
+
+                const transactionId = session.payment_intent;
+
+
+                const existingPayment = await paymentCollection.findOne({ transactionId });
+                if (existingPayment) {
+                    return res.send({
+                        success: true,
+                        message: 'Payment already processed',
+                        transactionId
+                    });
+                }
+
+                // Update order ONLY ONCE
+                await ordersCollection.updateOne(
+                    {
+                        _id: new ObjectId(session.metadata.orderId),
+                        paymentStatus: { $ne: 'paid' }
+                    },
+                    {
+                        $set: {
+                            paymentStatus: 'paid',
+                            paidAt: new Date()
+                        }
+                    }
+                );
+
                 const payment = {
                     amount: session.amount_total,
                     currency: session.currency,
                     customerEmail: session.customer_email,
                     orderId: session.metadata.orderId,
                     bookName: session.metadata.bookName,
-                    transactionId: session.payment_intent,
+                    transactionId,
                     paymentStatus: session.payment_status,
                     paidAt: new Date()
-                }
+                };
 
-                //     if (session.payment_status === 'paid') {
-                //         const resultPayment = await paymentCollection.insertOne(payment)
+                await paymentCollection.insertOne(payment);
 
-                //         logTracking(trackingId, 'parcel_paid')
+                res.send({ success: true, transactionId });
 
-                //         res.send({ success: true, modifyParcel: result, paymentInfo: resultPayment, trackingId: trackingId, transactionId: session.payment_intent })
-                //     }
-
+            } catch (error) {
+                console.error(error);
+                res.status(500).send({ success: false });
             }
-            res.send({ success: true })
-        })
+        });
+
+
+
+
+        // ///////// payment APIs
+        app.get('/payments', async (req, res) => {
+            try {
+                const { email } = req.query;
+                const query = email ? { customerEmail: email } : {};
+                const payments = await paymentCollection
+                    .find(query)
+                    .sort({ paidAt: -1 })
+                    .toArray();
+
+                res.send(payments);
+            } catch (error) {
+                console.error(error);
+                res.status(500).send({ success: false, message: 'Server error' });
+            }
+        });
+
 
 
         // Send a ping to confirm a successful connection
