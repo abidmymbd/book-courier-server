@@ -35,6 +35,7 @@ async function run() {
         const ordersCollection = db.collection('orders');
         const paymentCollection = db.collection('payments');
         const usersCollection = db.collection('users');
+        const reviewsCollection = db.collection('reviews');
 
 
 
@@ -391,6 +392,41 @@ async function run() {
                 res.status(500).send({ success: false, message: 'Server error' });
             }
         });
+
+
+        ////// Reviews APIs
+        app.post('/reviews', async (req, res) => {
+            const review = req.body;
+            review.createdAt = new Date();
+
+            try {
+                const hasOrdered = await ordersCollection.findOne({
+                    bookId: review.bookId,
+                    userEmail: review.userEmail
+                });
+                if (!hasOrdered) return res.status(403).send({ success: false, message: 'You cannot review without ordering' });
+
+                const result = await reviewsCollection.insertOne(review);
+                res.send(result);
+            } catch (err) {
+                console.error(err);
+                res.status(500).send({ success: false, message: 'Server error' });
+            }
+        });
+
+        app.get('/reviews', async (req, res) => {
+            const { bookId } = req.query;
+            if (!bookId) return res.status(400).send({ success: false, message: 'bookId required' });
+
+            try {
+                const reviews = await reviewsCollection.find({ bookId }).sort({ createdAt: -1 }).toArray();
+                res.send(reviews);
+            } catch (err) {
+                console.error(err);
+                res.status(500).send({ success: false, message: 'Server error' });
+            }
+        });
+
 
 
 
