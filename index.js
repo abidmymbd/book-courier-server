@@ -36,6 +36,43 @@ async function run() {
         const paymentCollection = db.collection('payments');
         const usersCollection = db.collection('users');
         const reviewsCollection = db.collection('reviews');
+        const wishlistCollection = db.collection('wishlist');
+
+
+        // Wishlist APIs
+        app.post('/wishlist', async (req, res) => {
+            const item = req.body;
+
+            const exists = await wishlistCollection.findOne({
+                bookId: item.bookId,
+                userEmail: item.userEmail
+            });
+
+            if (exists) {
+                return res.send({ message: 'Already added' });
+            }
+
+            item.createdAt = new Date();
+            const result = await wishlistCollection.insertOne(item);
+            res.send(result);
+        });
+
+
+        // Get wishlist by user email
+        app.get('/wishlist', async (req, res) => {
+            const { email } = req.query;
+            if (!email) return res.send([]);
+
+            const result = await wishlistCollection
+                .find({ userEmail: email })
+                .sort({ createdAt: -1 })
+                .toArray();
+
+            res.send(result);
+        });
+
+
+        
 
 
 
