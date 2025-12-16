@@ -72,9 +72,15 @@ async function run() {
         });
 
 
+        // Remove from wishlist
+        app.delete('/wishlist/:id', async (req, res) => {
+            const { id } = req.params;
+            const result = await wishlistCollection.deleteOne({ _id: new ObjectId(id) });
+            res.send({ success: result.deletedCount > 0 });
+        });
+
+
         
-
-
 
         // ////// users APIs
         app.post('/users', async (req, res) => {
