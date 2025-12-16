@@ -59,6 +59,14 @@ async function run() {
             res.send(users);
         });
 
+        // Get single user by email
+        app.get('/users/role/:email', async (req, res) => {
+            const email = req.params.email;
+            const user = await usersCollection.findOne({ email });
+            res.send(user);
+        });
+
+
         // Update user role (admin / librarian)
         app.patch('/users/:id/role', async (req, res) => {
             const { id } = req.params;
