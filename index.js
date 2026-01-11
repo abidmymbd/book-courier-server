@@ -80,7 +80,7 @@ async function run() {
         });
 
 
-        
+
 
         // ////// users APIs
         app.post('/users', async (req, res) => {
@@ -477,6 +477,59 @@ async function run() {
                 res.status(500).send({ success: false, message: 'Server error' });
             }
         });
+        
+
+        app.get('/dashboard-stats', async (req, res) => {
+            try {
+                const totalBooks = await booksCollection.countDocuments();
+                const totalOrders = await ordersCollection.countDocuments();
+                const totalUsers = await usersCollection.countDocuments();
+                const totalRevenueAgg = await paymentCollection.aggregate([
+                    { $match: { paymentStatus: 'paid' } },
+                    { $group: { _id: null, total: { $sum: "$amount" } } }
+                ]).toArray();
+                const totalRevenue = totalRevenueAgg[0]?.total || 0;
+
+                const pendingOrders = await ordersCollection.countDocuments({ status: 'pending' });
+                const completedOrders = await ordersCollection.countDocuments({ status: 'completed' });
+                const cancelledOrders = await ordersCollection.countDocuments({ status: 'cancelled' });
+
+                const monthlyRevenueAgg = await paymentCollection.aggregate([
+                    { $match: { paymentStatus: 'paid' } },
+                    {
+                        $group: {
+                            _id: { month: { $month: "$paidAt" }, year: { $year: "$paidAt" } },
+                            revenue: { $sum: "$amount" }
+                        }
+                    },
+                    { $sort: { "_id.year": 1, "_id.month": 1 } }
+                ]).toArray();
+
+                const monthlyRevenue = monthlyRevenueAgg.map(item => ({
+                    month: `${item._id.year}-${item._id.month}`,
+                    revenue: item.revenue
+                }));
+
+                const recentOrders = await ordersCollection.find().sort({ createdAt: -1 }).limit(5).toArray();
+
+                res.send({
+                    totalBooks,
+                    totalOrders,
+                    totalUsers,
+                    totalRevenue,
+                    pendingOrders,
+                    completedOrders,
+                    cancelledOrders,
+                    monthlyRevenue,
+                    recentOrders
+                });
+
+            } catch (err) {
+                console.error(err);
+                res.status(500).send({ success: false, message: 'Server error' });
+            }
+        });
+
 
 
 
